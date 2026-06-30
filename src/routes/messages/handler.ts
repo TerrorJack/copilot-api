@@ -10,7 +10,11 @@ import {
 } from "~/lib/config"
 import { createHandlerLogger, debugJson } from "~/lib/logger"
 import { findEndpointModel } from "~/lib/models"
-import { parseProviderModelAlias } from "~/lib/provider-model"
+import {
+  ensureOpenAIResponsesBridgeModel,
+  isOpenAIResponsesBridgeModel,
+  parseProviderModelAlias,
+} from "~/lib/provider-model"
 import { state } from "~/lib/state"
 import {
   generateRequestIdFromPayload,
@@ -130,8 +134,28 @@ export async function handleCompletion(c: Context) {
   }
   logger.debug("Extracted session ID:", sessionId)
 
-  const selectedModel = findEndpointModel(anthropicPayload.model)
+  const selectedModel = ensureOpenAIResponsesBridgeModel(
+    anthropicPayload.model,
+    findEndpointModel(anthropicPayload.model),
+  )
   anthropicPayload.model = selectedModel?.id ?? anthropicPayload.model
+
+  if (shouldPreferResponsesApi(selectedModel, anthropicPayload.model)) {
+    if (shouldUseResponsesApi(selectedModel, compactType)) {
+      return await messagesFlowHandlers.handleWithResponsesApi(
+        c,
+        anthropicPayload,
+        {
+          subagentMarker,
+          selectedModel,
+          requestId,
+          sessionId,
+          compactType,
+          logger,
+        },
+      )
+    }
+  }
 
   if (shouldUseMessagesApi(selectedModel)) {
     return await messagesFlowHandlers.handleWithMessagesApi(
@@ -194,5 +218,19 @@ const shouldUseMessagesApi = (selectedModel: Model | undefined): boolean => {
   }
   return (
     selectedModel?.supported_endpoints?.includes(MESSAGES_ENDPOINT) ?? false
+  )
+}
+
+const shouldPreferResponsesApi = (
+  selectedModel: Model | undefined,
+  modelId: string,
+): boolean => {
+  if (!selectedModel) {
+    return false
+  }
+
+  return (
+    isOpenAIResponsesBridgeModel(selectedModel.id)
+    || isOpenAIResponsesBridgeModel(modelId)
   )
 }

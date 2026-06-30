@@ -93,6 +93,7 @@ async function runClaudeCode(serverUrl: string): Promise<void> {
       ANTHROPIC_BASE_URL: serverUrl,
       ANTHROPIC_AUTH_TOKEN: "dummy",
       ANTHROPIC_MODEL: selectedModel,
+      ANTHROPIC_DEFAULT_OPUS_MODEL: selectedModel,
       ANTHROPIC_DEFAULT_SONNET_MODEL: selectedModel,
       ANTHROPIC_DEFAULT_HAIKU_MODEL: selectedSmallModel,
       DISABLE_NON_ESSENTIAL_MODEL_CALLS: "1",

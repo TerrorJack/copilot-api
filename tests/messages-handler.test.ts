@@ -33,6 +33,7 @@ type SelectedModel = {
 type FlowCallOptions = {
   compactType?: number
   requestId: string
+  selectedModel?: unknown
   sessionId?: string
   subagentMarker?: unknown
   anthropicBetaHeader?: string
@@ -443,6 +444,62 @@ describe("messages handler orchestration", () => {
     expect(forwardedPayload.model).toBe("messages-model")
   })
 
+  test("prefers the Responses API flow for GPT Responses models that also advertise Messages", async () => {
+    selectedModel = {
+      id: "gpt-5.4-mini",
+      supported_endpoints: ["/v1/messages", "/v1/responses"],
+    }
+
+    const app = createApp()
+    const response = await app.request("/", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(createPayload({ model: "gpt-5.4-mini" })),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe("responses")
+    expect(handleWithMessagesApi).not.toHaveBeenCalled()
+    expect(handleWithResponsesApi).toHaveBeenCalledTimes(1)
+    expect(handleWithChatCompletions).not.toHaveBeenCalled()
+
+    const [, forwardedPayload, options] = handleWithResponsesApi.mock.calls[0]
+    expect(forwardedPayload.model).toBe("gpt-5.4-mini")
+    expect(options.selectedModel).toMatchObject({
+      id: "gpt-5.4-mini",
+      supported_endpoints: ["/v1/messages", "/v1/responses"],
+    })
+  })
+
+  test("routes unresolved future GPT Responses models through the Responses API flow", async () => {
+    selectedModel = undefined
+
+    const app = createApp()
+    const response = await app.request("/", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(createPayload({ model: "gpt-5.5" })),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe("responses")
+    expect(handleWithMessagesApi).not.toHaveBeenCalled()
+    expect(handleWithResponsesApi).toHaveBeenCalledTimes(1)
+    expect(handleWithChatCompletions).not.toHaveBeenCalled()
+
+    const [, forwardedPayload, options] = handleWithResponsesApi.mock.calls[0]
+    expect(forwardedPayload.model).toBe("gpt-5.5")
+    expect(options.selectedModel).toMatchObject({
+      id: "gpt-5.5",
+      supported_endpoints: ["/responses"],
+      vendor: "openai",
+    })
+  })
+
   test("stabilizes Claude Code billing header before forwarding to the Messages API flow", async () => {
     selectedModel = {
       id: "messages-model",
@@ -539,6 +596,28 @@ describe("messages handler orchestration", () => {
     selectedModel = {
       id: "responses-ws-model",
       supported_endpoints: ["ws:/responses"],
+    }
+
+    const app = createApp()
+    const response = await app.request("/", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(createPayload()),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe("responses")
+    expect(handleWithMessagesApi).not.toHaveBeenCalled()
+    expect(handleWithResponsesApi).toHaveBeenCalledTimes(1)
+    expect(handleWithChatCompletions).not.toHaveBeenCalled()
+  })
+
+  test("delegates to the Responses API flow when the model supports /v1/responses", async () => {
+    selectedModel = {
+      id: "responses-v1-model",
+      supported_endpoints: ["/v1/responses"],
     }
 
     const app = createApp()

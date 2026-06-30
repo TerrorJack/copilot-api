@@ -17,7 +17,9 @@ import {
 } from "~/lib/config"
 
 export const RESPONSES_ENDPOINT = "/responses"
+export const RESPONSES_V1_ENDPOINT = "/v1/responses"
 export const RESPONSES_WS_ENDPOINT = "ws:/responses"
+export const RESPONSES_V1_WS_ENDPOINT = "ws:/v1/responses"
 export const DEFAULT_RESPONSES_COMPACT_THRESHOLD_RATIO = 0.9
 
 export const responsesUtilsDependencies = {
@@ -54,16 +56,34 @@ export const getResponsesTransportForModel = (
   if (
     options.compactType !== COMPACT_REQUEST
     && useWebSocket
-    && supportedEndpoints.includes(RESPONSES_WS_ENDPOINT)
+    && hasSupportedEndpoint(supportedEndpoints, [
+      RESPONSES_WS_ENDPOINT,
+      RESPONSES_V1_WS_ENDPOINT,
+    ])
   ) {
     return "websocket"
   }
 
-  if (supportedEndpoints.includes(RESPONSES_ENDPOINT)) {
+  if (
+    hasSupportedEndpoint(supportedEndpoints, [
+      RESPONSES_ENDPOINT,
+      RESPONSES_V1_ENDPOINT,
+    ])
+  ) {
     return "http"
   }
 
   return null
+}
+
+const hasSupportedEndpoint = (
+  supportedEndpoints: Array<string>,
+  expectedEndpoints: Array<string>,
+): boolean => {
+  const supportedEndpointSet = new Set(supportedEndpoints)
+  return expectedEndpoints.some((endpoint) =>
+    supportedEndpointSet.has(endpoint),
+  )
 }
 
 export const hasAgentInitiator = (payload: ResponsesPayload): boolean => {
